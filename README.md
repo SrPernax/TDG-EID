@@ -1,4 +1,4 @@
-# Proyecto 2: Simulador de una red de distribución de paquetes (INFO1158)
+# Simulador de una red de distribución de paquetes
 
 ## Enlaces del Equipo
 - [Informe Técnico](https://prism.openai.com/?u=c3691ad0-79cc-4f46-a467-34c15817ea70&pg=1&m=main.tex)
@@ -8,8 +8,13 @@
 ```text
 TDG-EID/
 ├── src/
-│   ├── __init__.py
-│   ├── graph_model.py      # Modelo del grafo, validaciones y modificaciones
+│   ├── config.py           # Constantes y cotas matemáticas del modelo
+│   ├── exceptions.py       # Excepciones personalizadas del modelo y validadores
+│   ├── models/
+│   │   ├── vertex.py       # Clase Vertex (centro logístico v en V)
+│   │   ├── edge.py         # Clase Edge (ruta dirigida e en E y capacidad)
+│   │   └── graph.py        # Clase DirectedGraph y operaciones en vivo
+│   ├── validators.py       # Validadores matemáticos del modelo y búsqueda de caminos
 │   ├── presets.py          # Configuraciones de red y caso de comprobación manual
 │   ├── max_flow.py         # Algoritmo de flujo máximo, corte mínimo y verificador
 │   └── visualizer.py       # Renderizado visual del grafo con Graphviz (DOT)
