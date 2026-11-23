@@ -8,16 +8,26 @@
 ```text
 TDG-EID/
 ├── src/
-│   ├── config.py           # Constantes y cotas matemáticas del modelo
-│   ├── exceptions.py       # Excepciones personalizadas del modelo y validadores
+│   ├── __init__.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── config.py       # Constantes y cotas matemáticas del modelo
+│   │   ├── exceptions.py   # Excepciones personalizadas del modelo y validadores
+│   │   └── validators.py   # Validadores matemáticos del modelo y búsqueda de caminos
 │   ├── models/
+│   │   ├── __init__.py
 │   │   ├── vertex.py       # Clase Vertex (centro logístico v en V)
 │   │   ├── edge.py         # Clase Edge (ruta dirigida e en E y capacidad)
 │   │   └── graph.py        # Clase DirectedGraph y operaciones en vivo
-│   ├── validators.py       # Validadores matemáticos del modelo y búsqueda de caminos
-│   ├── presets.py          # Configuraciones de red y caso de comprobación manual
-│   ├── max_flow.py         # Algoritmo de flujo máximo, corte mínimo y verificador
-│   └── visualizer.py       # Renderizado visual del grafo con Graphviz (DOT)
+│   ├── algorithms/
+│   │   ├── __init__.py
+│   │   └── max_flow.py     # Flujo máximo, corte mínimo y verificador de optimalidad
+│   ├── data/
+│   │   ├── __init__.py
+│   │   └── presets.py      # Configuraciones de red y caso de comprobación manual
+│   └── ui/
+│       ├── __init__.py
+│       └── visualizer.py   # Renderizado visual del grafo con Graphviz (DOT)
 ├── app.py                  # Interfaz interactiva en Streamlit
 ├── requirements.txt        # Dependencias del proyecto
 └── project.pdf             # Enunciado y rúbrica oficial

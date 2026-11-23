@@ -1,6 +1,5 @@
 """
-Entry point: app.py
-Owner: Member 3
+Module: app.py
 Description:
     Interactive Streamlit application to select source/sink nodes, execute
     the maximum flow and minimum cut calculations, and perform runtime network
@@ -11,7 +10,8 @@ Description:
 import streamlit as st
 
 
-def main():
+def main() -> None:
+    """Launch the interactive Streamlit simulator interface."""
     st.set_page_config(
         page_title="Package Distribution Network Simulator - INFO1158",
         layout="wide",
