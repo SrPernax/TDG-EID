@@ -1,0 +1,537 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-tabla]{babel}
+\usepackage[margin=2.5cm]{geometry}
+
+% Paquetes matemáticos, gráficos y de tablas
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+% Paquetes para dibujar grafos en LaTeX
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,babel}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    urlcolor=blue!70!black,
+    citecolor=blue!70!black
+}
+
+% Formato de párrafos
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6\baselineskip}
+
+\title{\textbf{Simulador de una Red de Distribución de Paquetes}\\
+\large Teoría de Grafos -- INFO1158}
+\author{
+    Ignacio Loncón Pérez\and
+    Lukas Macalusso Trillat\and 
+    Nicolás Cayuman Hernández
+}
+\date{26 de noviembre de 2026}
+
+\begin{document}
+\maketitle
+
+\newpage
+
+\begin{abstract}
+En el presente informe se desarrolla la modelación matemática, el diseño algorítmico y la simulación interactiva de una red logística de distribución de paquetes mediante teoría de grafos. Se representa la red a través de un grafo dirigido capacitado $G = (V, E)$, donde los vértices corresponden a centros logísticos y los arcos a rutas de transporte con capacidad máxima por hora. Se comparan estrategias algorítmicas para el problema de flujo máximo, implementando con código propio la solución seleccionada junto con la identificación de cortes mínimos $(S, T)$ y la verificación formal de optimalidad en tres configuraciones operativas y un caso de control manual.
+\end{abstract} 
+
+\newpage
+\tableofcontents
+\newpage
+
+% ============================================================================
+% SECCIÓN 1: MODELACIÓN MATEMÁTICA DE LA RED
+% ============================================================================
+\section{Modelación Matemática de la Red}
+
+\subsection{Definición Formal del Modelo}
+La red de distribución de paquetes se modela matemáticamente mediante un grafo dirigido y ponderado (red de transporte) definido por la tupla $(G, c, s, t)$, donde:
+\begin{itemize}
+    \item $G = (V, E)$ es un grafo dirigido compuesto por un conjunto finito no vacío de vértices $V$ y un conjunto de pares ordenados de arcos dirigidos $E \subseteq V \times V$.
+    \item Cada vértice $v \in V$ representa un \textbf{centro logístico} (centro de acopio, planta de clasificación o terminal regional) por el cual circulan paquetes.
+    \item Cada arco dirigido $e = (u, v) \in E$ representa una \textbf{ruta de transporte habilitada} con sentido único de circulación desde el centro $u$ hacia el centro $v$.
+    \item $c: E \longrightarrow \{1, 2, \dots, 12\}$ es la \textbf{función de capacidad}, la cual asigna a cada ruta $(u, v) \in E$ un número entero positivo $c(u, v)$ que indica la cantidad máxima de paquetes por hora que pueden trasladarse por dicho enlace.
+    \item $s \in V$ corresponde al vértice \textbf{origen} (fuente de despacho) y $t \in V$ corresponde al vértice \textbf{destino} (sumidero o centro de entrega final), con $s \neq t$.
+\end{itemize}
+
+\subsection{Restricciones Estructurales y Topológicas}
+De acuerdo con las condiciones operativas del problema, la configuración inicial de la red satisface las siguientes restricciones formales:
+\begin{enumerate}
+    \item \textbf{Cotas de cardinalidad inicial:} El número de centros logísticos y rutas activas cumple:
+    \[
+        10 \le |V| \le 12, \qquad 15 \le |E| \le 20.
+    \]
+    En particular, nuestra configuración principal cuenta con $|V| = 10$ vértices y $|E| = 18$ arcos dirigidos.
+    \item \textbf{Ausencia de lazos:} Ningún centro logístico tiene una ruta hacia sí mismo:
+    \[
+        \forall u \in V, \quad (u, u) \notin E.
+    \]
+    \item \textbf{Ausencia de arcos repetidos:} Entre un mismo par ordenado de centros existe a lo sumo una ruta dirigida.
+    \item \textbf{Ausencia de arcos recíprocos:} No existen flujos simultáneos en sentidos opuestos entre dos mismos centros:
+    \[
+        \forall u, v \in V, \quad (u, v) \in E \implies (v, u) \notin E.
+    \]
+    \item \textbf{Ausencia de vértices aislados:} Todo centro logístico posee al menos una ruta entrante o saliente:
+    \[
+        \forall v \in V, \quad \deg^+(v) + \deg^-(v) \ge 1.
+    \]
+    \item \textbf{Conectividad múltiple entre origen y destino:} Para el origen $s = O$ y el destino $t = T$, existen al menos dos caminos dirigidos simples distintos $P_1, P_2$ desde $s$ hasta $t$.
+\end{enumerate}
+
+\subsection{Identificación de los Conjuntos $V$, $E$ y Función de Capacidad $c$}
+Para la configuración inicial de la red logística se definieron $|V| = 10$ centros organizados en cuatro niveles operativos (origen, hubs zonales, plantas de clasificación y terminales regionales hasta el destino final):
+\[
+    V = \{O, A, B, C, D, E, F, G, H, T\}, \quad \text{con origen } s = O \text{ y destino } t = T.
+\]
+
+En el Cuadro~\ref{tab:vertices} se detalla el significado logístico de cada vértice del conjunto $V$.
+
+\begin{table}[H]
+\centering
+\caption{Conjunto de vértices $V$ y su significado en la red logística.}
+\label{tab:vertices}
+\begin{tabular}{cll}
+\toprule
+\textbf{Vértice} & \textbf{Nombre del Centro} & \textbf{Rol Operativo en la Red} \\
+\midrule
+$O$ & Centro Origen ($s$) & Planta central de despacho inicial de paquetes \\
+$A$ & Hub Norte A & Centro de distribución primario zona norte \\
+$B$ & Hub Central B & Centro de distribución primario zona central \\
+$C$ & Hub Sur C & Centro de distribución primario zona sur \\
+$D$ & Planta Clasificación D & Nodo intermedio de consolidación norte-centro \\
+$E$ & Planta Clasificación E & Nodo intermedio de consolidación central \\
+$F$ & Planta Clasificación F & Nodo intermedio de consolidación centro-sur \\
+$G$ & Terminal Regional G & Terminal de última milla sector poniente \\
+$H$ & Terminal Regional H & Terminal de última milla sector oriente \\
+$T$ & Centro Destino ($t$) & Terminal principal de recepción final \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+El conjunto de rutas dirigidas $E$ está conformado por $|E| = 18$ arcos cuyas capacidades $c(u, v) \in \{1, \dots, 12\}$ (en paquetes por hora) se especifican en el Cuadro~\ref{tab:arcos}.
+
+\begin{table}[H]
+\centering
+\caption{Conjunto de arcos dirigidos $E$ y valores de la función de capacidad $c(u, v)$.}
+\label{tab:arcos}
+\begin{tabular}{cccccc}
+\toprule
+\textbf{Arco $(u,v)$} & \textbf{Capacidad $c(u,v)$} & \textbf{Arco $(u,v)$} & \textbf{Capacidad $c(u,v)$} & \textbf{Arco $(u,v)$} & \textbf{Capacidad $c(u,v)$} \\
+\midrule
+$(O, A)$ & 10 & $(B, E)$ & 5 & $(E, H)$ & 6 \\
+$(O, B)$ & 8  & $(B, F)$ & 4 & $(F, H)$ & 5 \\
+$(O, C)$ & 6  & $(C, F)$ & 6 & $(F, T)$ & 3 \\
+$(A, D)$ & 7  & $(D, G)$ & 8 & $(G, H)$ & 2 \\
+$(A, E)$ & 4  & $(D, H)$ & 2 & $(G, T)$ & 9 \\
+$(B, D)$ & 3  & $(E, G)$ & 4 & $(H, T)$ & 8 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+En la Figura~\ref{fig:red_inicial} se muestra la representación gráfica del grafo dirigido inicial $G = (V, E)$ junto con las capacidades máximas de cada ruta.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    >={Stealth[round]},
+    node distance=2.2cm and 2.5cm,
+    every node/.style={font=\small},
+    vertex/.style={circle, draw=black!80, thick, fill=blue!8, minimum size=8mm},
+    source/.style={vertex, fill=cyan!25, font=\small\bfseries},
+    sink/.style={vertex, fill=green!25, font=\small\bfseries},
+    edge_lbl/.style={fill=white, inner sep=1.2pt, font=\scriptsize}
+]
+    % Nodos por capas
+    \node[source] (O) at (0, 0) {$O$};
+
+    \node[vertex] (A) at (2.8, 2.2) {$A$};
+    \node[vertex] (B) at (2.8, 0) {$B$};
+    \node[vertex] (C) at (2.8, -2.2) {$C$};
+
+    \node[vertex] (D) at (5.8, 2.2) {$D$};
+    \node[vertex] (E) at (5.8, 0) {$E$};
+    \node[vertex] (F) at (5.8, -2.2) {$F$};
+
+    \node[vertex] (G) at (8.8, 1.3) {$G$};
+    \node[vertex] (H) at (8.8, -1.0) {$H$};
+
+    \node[sink]   (T) at (11.6, 0) {$T$};
+
+    % Arcos y capacidades
+    \draw[->, thick] (O) -- node[edge_lbl] {10} (A);
+    \draw[->, thick] (O) -- node[edge_lbl] {8} (B);
+    \draw[->, thick] (O) -- node[edge_lbl] {6} (C);
+
+    \draw[->, thick] (A) -- node[edge_lbl] {7} (D);
+    \draw[->, thick] (A) -- node[edge_lbl, pos=0.32] {4} (E);
+    \draw[->, thick] (B) -- node[edge_lbl, pos=0.32] {3} (D);
+    \draw[->, thick] (B) -- node[edge_lbl] {5} (E);
+    \draw[->, thick] (B) -- node[edge_lbl] {4} (F);
+    \draw[->, thick] (C) -- node[edge_lbl] {6} (F);
+
+    \draw[->, thick] (D) -- node[edge_lbl] {8} (G);
+    \draw[->, thick] (D) -- node[edge_lbl, pos=0.35] {2} (H);
+    \draw[->, thick] (E) -- node[edge_lbl, pos=0.35] {4} (G);
+    \draw[->, thick] (E) -- node[edge_lbl] {6} (H);
+    \draw[->, thick] (F) -- node[edge_lbl] {5} (H);
+    \draw[->, thick] (F) to[bend right=22] node[edge_lbl] {3} (T);
+
+    \draw[->, thick] (G) -- node[edge_lbl] {2} (H);
+    \draw[->, thick] (G) -- node[edge_lbl] {9} (T);
+    \draw[->, thick] (H) -- node[edge_lbl] {8} (T);
+\end{tikzpicture}
+\caption{Representación del grafo dirigido inicial $G = (V, E)$ con $|V| = 10$ centros y $|E| = 18$ rutas.}
+\label{fig:red_inicial}
+\end{figure}
+
+Se verifica directamente la existencia de múltiples caminos dirigidos distintos entre $s = O$ y $t = T$, por ejemplo:
+\[
+    P_1: O \to A \to D \to G \to T, \qquad P_2: O \to B \to E \to H \to T, \qquad P_3: O \to C \to F \to T.
+\]
+
+% ============================================================================
+% SECCIÓN 2: INVESTIGACIÓN, SELECCIÓN E IMPLEMENTACIÓN DEL ALGORITMO
+% ============================================================================
+\section{Investigación, Selección e Implementación del Algoritmo}
+
+\subsection{Investigación y Comparación de Estrategias Algorítmicas}
+
+El problema de \textbf{flujo máximo} en una red dirigida capacitada $(G, c, s, t)$ consiste en determinar una función de flujo $x: E \longrightarrow \mathbb{R}_{\ge 0}$ que maximice la cantidad neta enviada desde el origen $s$ hasta el destino $t$:
+\[
+    |x| = \sum_{(s,v) \in E} x(s, v) - \sum_{(u,s) \in E} x(u, s),
+\]
+sujeta a las restricciones de \textbf{capacidad} en cada arco y de \textbf{conservación de flujo} en todo vértice intermedio \cite{cormen,ahuja}:
+\[
+    0 \le x(u, v) \le c(u, v), \quad \forall (u, v) \in E,
+\]
+\[
+    \sum_{(u,v) \in E} x(u, v) = \sum_{(v,w) \in E} x(v, w), \quad \forall v \in V \setminus \{s, t\}.
+\]
+
+Para resolver este problema se investigaron estrategias basadas en la búsqueda de \textbf{caminos aumentantes} sobre el \textbf{grafo residual} $G_f = (V, E_f)$, donde cada arco posee una capacidad residual $c_f(u, v)$ que indica cuánto flujo adicional puede enviarse de $u$ a $v$ (incluyendo arcos inversos que permiten redistribuir flujo previamente asignado) \cite{ford1956,cormen}. En particular, se analizaron el método general de \textbf{Ford--Fulkerson} con búsqueda en profundidad (DFS), su variante \textbf{Edmonds--Karp} con búsqueda en anchura (BFS) y el algoritmo de \textbf{Dinic (Dinitz)}.
+
+\subsubsection{Descripción de las Alternativas Evaluadas}
+
+\begin{enumerate}
+    \item \textbf{Método de Ford--Fulkerson con DFS \cite{ford1956}:} Parte de un flujo nulo y busca iterativamente cualquier camino aumentante desde $s$ hasta $t$ en la red residual $G_f$ mediante búsqueda en profundidad (DFS). En cada paso envía un incremento igual al cuello de botella $\Delta = \min_{(u,v) \in P} c_f(u, v)$ y actualiza las capacidades residuales directas e inversas hasta que no exista ningún camino aumentante. Si bien garantiza convergencia con capacidades enteras, su complejidad temporal es $O(|E| \cdot |x^*|)$, lo cual depende directamente del valor del flujo máximo $|x^*|$ y puede degradarse severamente ante malas elecciones de caminos \cite{cormen}.
+
+    \item \textbf{Algoritmo de Edmonds--Karp (variante de Ford--Fulkerson con BFS) \cite{edmonds1972}:} Corresponde a una especialización del método de Ford--Fulkerson que reemplaza la selección arbitraria del camino aumentante por una \textbf{búsqueda en anchura (BFS)} en $G_f$, eligiendo siempre un camino aumentante con el menor número de arcos. Esta restricción asegura que la distancia mínima (en arcos) desde $s$ hacia cada vértice en $G_f$ nunca decrece entre iteraciones, acotando el número total de aumentos en $O(|V| \cdot |E|)$. Como cada BFS toma tiempo $O(|E|)$, el algoritmo alcanza una complejidad fuertemente polinomial de $O(|V| \cdot |E|^2)$, completamente independiente de las magnitudes de las capacidades \cite{edmonds1972,cormen}.
+
+    \item \textbf{Algoritmo de Dinic (Dinitz) \cite{dinic1970}:} Extiende la idea de caminos más cortos organizando la ejecución en fases. En cada fase construye un \textbf{grafo de niveles} mediante BFS desde $s$ (conservando únicamente arcos residuales que avanzan al nivel siguiente) y, a continuación, ejecuta múltiples búsquedas en profundidad (DFS) con puntero de arco actual hasta obtener un \textbf{flujo bloqueante}, es decir, saturar simultáneamente todos los caminos aumentantes de longitud mínima de esa fase. Dado que la distancia de $s$ a $t$ aumenta estrictamente en al menos una unidad por fase (a lo sumo $|V| - 1$ fases) y cada flujo bloqueante se calcula en $O(|V| \cdot |E|)$, su complejidad temporal en el peor caso es $O(|V|^2 \cdot |E|)$ \cite{dinic1970,ahuja}.
+\end{enumerate}
+
+\subsubsection{Comparación de Características}
+
+En el Cuadro~\ref{tab:comparacion_algoritmos} se sintetizan las propiedades teóricas y operativas de las estrategias investigadas.
+
+\begin{table}[H]
+\centering
+\caption{Comparación técnica de estrategias algorítmicas para el problema de flujo máximo.}
+\label{tab:comparacion_algoritmos}
+\begin{tabular}{p{2.5cm}p{3.8cm}p{3.8cm}p{3.8cm}}
+\toprule
+\textbf{Criterio} & \textbf{Ford--Fulkerson (DFS)} & \textbf{Edmonds--Karp (BFS)} & \textbf{Dinic (Dinitz)} \\
+\midrule
+\textbf{Estrategia de búsqueda} & Un camino aumentante arbitrario por iteración (DFS). & Un camino aumentante más corto por iteración (BFS). & Grafo de niveles (BFS) más flujo bloqueante por fase (múltiples DFS). \\
+\textbf{Complejidad temporal} & $O(|E| \cdot |x^*|)$ (pseudopolinomial). & $O(|V| \cdot |E|^2)$ (fuertemente polinomial). & $O(|V|^2 \cdot |E|)$ (fuertemente polinomial). \\
+\textbf{Complejidad espacial} & $O(|V| + |E|)$. & $O(|V| + |E|)$. & $O(|V| + |E|)$. \\
+\textbf{Dependencia de capacidades} & Sí; sensible al orden y magnitud de $c(u, v)$. & No; independiente de los valores de capacidad. & No; independiente de los valores de capacidad. \\
+\textbf{Complejidad de implementación} & Baja. & Baja a moderada; estructura iterativa directa. & Moderada a alta; requiere niveles y puntero de arco actual. \\
+\textbf{Trazabilidad y verificación} & Irregular; depende del orden de recorrido DFS. & Alta; secuencia determinista de caminos cortos verificable a mano. & Menor; agrupa múltiples aumentos por fase de flujo bloqueante. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Justificación de la Selección}
+
+Para el simulador de red de distribución de paquetes se selecciona el \textbf{algoritmo de Edmonds--Karp} \cite{edmonds1972} por las siguientes razones fundamentadas en las características del problema:
+
+\begin{itemize}
+    \item \textbf{Garantía teórica frente a Ford--Fulkerson con DFS:} Al ser una variante de Ford--Fulkerson guiada por BFS, elimina la dependencia pseudopolinomial respecto a $|x^*|$ y asegura terminación en tiempo polinomial $O(|V| \cdot |E|^2)$ en cualquier configuración de capacidades \cite{cormen}.
+    \item \textbf{Adecuación a la escala de la red frente a Dinic:} Aunque Dinic presenta una mejor cota asintótica ($O(|V|^2 \cdot |E|)$ frente a $O(|V| \cdot |E|^2)$), la ventaja práctica de construir grafos de niveles y flujos bloqueantes solo resulta significativa en redes masivas o densas \cite{ahuja}. En el contexto de este proyecto ($10 \le |V| \le 12$ y $15 \le |E| \le 20$), la diferencia de tiempo de ejecución entre ambos algoritmos es despreciable (del orden de microsegundos), por lo que la mayor complejidad estructural de Dinic no aporta beneficios operativos reales.
+    \item \textbf{Trazabilidad para validación manual y análisis interactivo:} Cada iteración de Edmonds--Karp identifica un único camino aumentante más corto junto con su cuello de botella $\Delta$, lo que permite registrar el historial paso a paso y contrastar de forma directa la salida del programa con la resolución manual de la Sección~5.
+    \item \textbf{Integración directa con el corte mínimo:} Al concluir sin caminos aumentantes, la red residual final $G_f$ obtenida por Edmonds--Karp permite determinar inmediatamente la partición $(S, T)$ del corte mínimo mediante un recorrido BFS desde $s$, verificando la dualidad fuerte $|x^*| = c(S, T)$.
+\end{itemize}
+
+\subsection{Arquitectura de Datos e Implementación Propia}
+El software fue desarrollado en lenguaje \textbf{Python} utilizando exclusivamente estructuras de datos nativas (\texttt{dict}, \texttt{list}, \texttt{set} y \texttt{collections.deque}), sin emplear bibliotecas externas de cálculo algorítmico sobre grafos. La visualización e interfaz interactiva se construyeron con \textbf{Streamlit} y \textbf{Graphviz}.
+
+\begin{itemize}
+    \item \textbf{Repositorio del código fuente:} \url{https://github.com/SrPernax/TDG-EID}
+    \item \textbf{Entorno y dependencias:} Python $\ge 3.10$, \texttt{streamlit >= 1.46.0} y \texttt{graphviz >= 0.20.0} (declarados en \texttt{requirements.txt}).
+    \item \textbf{Instrucciones de ejecución:} Crear un entorno virtual, instalar las dependencias mediante \texttt{pip install -r requirements.txt} e iniciar la aplicación con \texttt{streamlit run app.py}.
+\end{itemize}
+
+\subsubsection{Modelación Orientada a Objetos del Grafo y Validadores (\texttt{src/models/} y \texttt{src/core/})}
+La estructura matemática $G = (V, E)$ se implementó mediante tres clases modulares y una capa base de configuración, excepciones y validación:
+\begin{enumerate}
+    \item \textbf{Clase \texttt{Vertex} (\texttt{src/models/vertex.py}):} Encapsula cada centro logístico mediante su identificador único \texttt{id} y su etiqueta descriptiva \texttt{label}.
+    \item \textbf{Clase \texttt{Edge} (\texttt{src/models/edge.py}):} Representa cada ruta dirigida $(u, v) \in E$, almacenando el nodo de origen \texttt{u}, nodo de destino \texttt{v}, capacidad entera \texttt{capacity} $\in \{1, \dots, 12\}$ y el estado operativo booleano \texttt{active}.
+    \item \textbf{Clase \texttt{DirectedGraph} (\texttt{src/models/graph.py}):} Administra los diccionarios de vértices, arcos y conjuntos de adyacencia saliente (\texttt{adj}). Incluye un método propio de recorrido en profundidad iterativo (\texttt{has\_min\_distinct\_paths}) para comprobar la existencia de al menos dos caminos dirigidos simples distintos de $s$ a $t$, copia profunda independiente (\texttt{copy}) y operaciones de modificación en tiempo real sin editar el código fuente:
+    \begin{itemize}
+        \item \texttt{toggle\_edge(u, v, active)}: Desactiva o reactiva una ruta existente. Cuando una ruta está inactiva, \texttt{get\_capacity(u, v, only\_active=True)} retorna capacidad efectiva $0$.
+        \item \texttt{update\_capacity(u, v, new\_cap)}: Actualiza la capacidad de una ruta verificando que sea un entero en $[1, 12]$.
+        \item \texttt{add\_edge(u, v, cap)}: Incorpora una nueva conexión validando previamente que no introduzca lazos, arcos repetidos ni arcos recíprocos.
+    \end{itemize}
+    \item \textbf{Capa \texttt{src/core/} (\texttt{config.py}, \texttt{exceptions.py} y \texttt{validators.py}):} Define las constantes y cotas matemáticas del modelo, una jerarquía de excepciones personalizadas (\texttt{GraphError} y subclases) y las funciones de validación (\texttt{validate\_capacity}, \texttt{validate\_new\_edge}, \texttt{validate\_source\_sink}, \texttt{validate\_initial\_network} y \texttt{validate\_manual\_network}) que garantizan el cumplimiento estricto de los invariantes del modelo (incluyendo cotas de cardinalidad y ausencia de vértices aislados).
+\end{enumerate}
+
+\subsubsection{Implementación del Algoritmo de Flujo Máximo y Corte Mínimo}
+El núcleo algorítmico se implementó íntegramente con código propio en \texttt{src/algorithms/max\_flow.py}, estructurado en cinco funciones coordinadas:
+\begin{enumerate}
+    \item \textbf{\texttt{build\_residual\_graph(graph)}:} Recibe una instancia de \texttt{DirectedGraph} y construye el mapa de adyacencia del grafo residual inicial $G_f$ (\texttt{dict[str, dict[str, int]]}) considerando exclusivamente las rutas activas. Para cada arco activo $(u, v)$ inicializa la capacidad residual directa $c_f(u, v) = c(u, v)$ y crea el arco inverso correspondiente con capacidad residual $c_f(v, u) = 0$.
+    \item \textbf{\texttt{\_bfs\_augmenting\_path(residual, s, t)}:} Ejecuta una búsqueda en anchura (BFS) utilizando \texttt{collections.deque} sobre la red residual desde $s$ hasta $t$, transitando únicamente por arcos con $c_f(u, v) > 0$. Si $t$ es alcanzable, reconstruye el camino aumentante más corto $P$ mediante un diccionario de predecesores y calcula su cuello de botella $\Delta = \min_{(u,v) \in P} c_f(u, v)$; en caso contrario retorna \texttt{None}.
+    \item \textbf{\texttt{edmonds\_karp(graph, s, t)}:} Valida la existencia y distinción de $s$ y $t$, inicializa $G_f$ e invoca iterativamente a \texttt{\_bfs\_augmenting\_path} mientras existan caminos aumentantes. En cada iteración descuenta $\Delta$ de cada arco directo $(u, v)$ del camino, suma $\Delta$ al arco inverso $(v, u)$ y registra el paso en una lista de iteraciones. Al finalizar, obtiene el flujo asignado a cada arco original como $x(u, v) = c(u, v) - c_f(u, v)$ (y $0$ para rutas inactivas) y calcula el valor total neto saliente de $s$, $|x^*| = \sum_{(s,v)\in E} x(s, v) - \sum_{(u,s)\in E} x(u, s)$. Retorna un diccionario con \texttt{max\_flow}, \texttt{flows}, \texttt{residual} e \texttt{iterations}.
+    \item \textbf{\texttt{find\_min\_cut(graph, residual, s, t)}:} A partir del grafo residual final $G_f$, realiza un recorrido BFS desde $s$ siguiendo solo arcos con capacidad residual estrictamente positiva ($c_f(u, v) > 0$) para determinar el conjunto de vértices alcanzables $S$ y su complemento $T = V \setminus S$. Identifica todos los arcos activos originales $(u, v)$ con $u \in S$ y $v \in T$ y suma sus capacidades para obtener $c(S, T)$. Retorna \texttt{S}, \texttt{T}, \texttt{cut\_edges} y \texttt{capacity}.
+    \item \textbf{\texttt{verify\_optimality(graph, flows, max\_flow\_value, min\_cut\_capacity, s, t)}:} Automatiza la comprobación matemática de optimalidad verificando simultáneamente las tres condiciones teóricas: (i) restricciones de capacidad $0 \le x(u, v) \le c(u, v)$ en rutas activas y $x(u, v) = 0$ en rutas inactivas, (ii) conservación de flujo en cada vértice intermedio $v \in V \setminus \{s, t\}$, y (iii) dualidad fuerte $|x^*| = c(S, T)$. Retorna el diagnóstico global (\texttt{is\_optimal}) junto con el detalle por arco y por vértice.
+\end{enumerate}
+
+% ============================================================================
+% SECCIÓN 3: CORTE MÍNIMO Y VISUALIZACIÓN INTERACTIVA
+% ============================================================================
+\section{Corte Mínimo y Visualización Interactiva}
+
+\subsection{Teorema de Flujo Máximo--Corte Mínimo}
+Una partición $(S, T)$ del conjunto de vértices $V = S \cup T$, tal que $S \cap T = \varnothing$, $s \in S$ y $t \in T$, define un \textbf{corte $s$-$t$}. La capacidad del corte corresponde a la suma de las capacidades de todos los arcos dirigidos que cruzan desde el conjunto $S$ hacia el conjunto $T$:
+\[
+    c(S, T) = \sum_{(u,v) \in E, \, u \in S,\, v \in T} c(u, v).
+\]
+Por el \textbf{Teorema de Flujo Máximo--Corte Mínimo} (Ford y Fulkerson, 1956), para cualquier red dirigida con capacidades, el valor máximo de un flujo factible $|x^*|$ desde $s$ hasta $t$ es exactamente igual a la capacidad mínima entre todos los cortes $s$-$t$ posibles:
+\[
+    \max_{x} |x| = \min_{(S, T)} c(S, T).
+\]
+
+\subsection{Interfaz Interactiva y Representación Visual}
+La aplicación interactiva fue desarrollada en \textbf{Streamlit} integrando motores de renderizado gráfico mediante \textbf{Graphviz} para representar visualmente los centros logísticos, sus conexiones dirigidas y los resultados del análisis de flujo en tiempo real. Como se observa en la Figura~\ref{fig:main_view}, la interfaz se organiza en dos áreas principales:
+
+\begin{itemize}
+    \item \textbf{Panel de Control Lateral (\textit{Control Panel} y \textit{Live Network Editor}):} Permite seleccionar entre los escenarios predefinidos (red principal, modificaciones operativas o caso manual de verificación), escoger dinámicamente los nodos de origen ($s$) y destino ($t$), y ejecutar el recálculo inmediato del flujo máximo. Asimismo, incorpora controles interactivos para modificar la topología de la red sin alterar el código fuente: habilitar o desactivar rutas existentes (\textit{Enable / Disable Route}), ajustar capacidades enteras dentro del rango $[1, 12]$ (\textit{Modify Route Capacity}), agregar nuevas conexiones dirigidas validando las restricciones topológicas (\textit{Add New Route}) y restablecer la configuración original (\textit{Reset Scenario}).
+    \item \textbf{Panel Principal de Visualización y Diagnóstico:} Muestra en la parte superior las métricas clave de la ejecución: el valor del flujo máximo $|x^*|$ (en $\text{pkg/h}$), la capacidad del corte mínimo $c(S, T)$, la proporción de rutas activas y el estado de verificación matemática de optimalidad. Debajo se detallan los conjuntos $S$ y $T$ de la partición y los arcos saturados que conforman el corte mínimo.
+\end{itemize}
+
+En el grafo interactivo (pestaña \textit{Network Graph}), cada arco muestra la etiqueta $x(u,v) / c(u,v)$ correspondiente al flujo asignado respecto a su capacidad máxima. Un código de colores diferencia visualmente el estado estructural de la solución: los vértices se distinguen según si corresponden al origen $s$, al destino $t$, al conjunto alcanzable $S$ o al conjunto $T$; mientras que los arcos destacan en \textbf{rojo} las aristas del corte mínimo $(S \to T)$, en \textbf{azul} las rutas internas saturadas ($x = c$), en \textbf{verde} las rutas con flujo activo no saturado ($0 < x < c$) y en \textbf{gris} las rutas sin flujo o desactivadas. Adicionalmente, la plataforma incluye pestañas especializadas para inspeccionar el detalle paso a paso de los caminos aumentantes (\textit{Routes \& Iterations}), la auditoría matemática de restricciones (\textit{Optimality Verification}) y la comparativa entre escenarios (\textit{Scenario Comparison}).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{assets/main_view.png}
+\caption{Interfaz interactiva del simulador mostrando el panel de control, métricas principales y la visualización del grafo de la red principal con flujo máximo $|x^*| = 20\text{ pkg/h}$ y arcos de corte mínimo resaltados.}
+\label{fig:main_view}
+\end{figure}
+
+% ============================================================================
+% SECCIÓN 4: SIMULACIÓN Y ANÁLISIS DE MODIFICACIONES
+% ============================================================================
+\section{Simulación y Análisis de Modificaciones}
+
+\subsection{Definición de las Tres Configuraciones Analizadas}
+Para evaluar el comportamiento de la red ante contingencias operativas y mejoras de infraestructura, se definieron en el módulo \texttt{src/data/presets.py} tres configuraciones comparables con origen $s = O$ y destino $t = T$:
+\begin{enumerate}
+    \item \textbf{Configuración 1 (Red Principal Inicial):} Red base de $|V| = 10$ vértices y $|E| = 18$ rutas activas descrita en la Sección~1. En esta configuración, la capacidad máxima que sale del origen es $\sum_{(O,v)} c(O,v) = 10 + 8 + 6 = 24$ paquetes/hora, pero la capacidad máxima que puede ingresar al destino $T$ está limitada por sus arcos entrantes $(F, T), (G, T)$ y $(H, T)$, los cuales suman $3 + 9 + 8 = 20$ paquetes/hora.
+    \item \textbf{Configuración 2 (Modificación 1 -- Contingencia en rutas intermedias):} A partir de la red inicial, se \textbf{desactiva la ruta crítica $(D, G)$} (cuya capacidad era $8$) y se \textbf{reduce la capacidad de la ruta $(E, H)$ de $6$ a $3$ paquetes/hora}, simulando una interrupción vial hacia la Terminal G y una restricción operativa hacia la Terminal H.
+    \item \textbf{Configuración 3 (Modificación 2 -- Expansión de capacidad hacia destino):} A partir de la red inicial, se \textbf{agrega una nueva conexión directa $(E, T)$ con capacidad $c(E, T) = 6$} (cumpliendo la ausencia de lazos y arcos recíprocos) y se \textbf{amplía la capacidad de la ruta $(H, T)$ de $8$ a $11$ paquetes/hora}, eliminando el cuello de botella en la entrada a $T$.
+\end{enumerate}
+
+\subsection{Comparación de Flujo Máximo y Corte Mínimo entre Configuraciones}
+Al ejecutar el algoritmo de Edmonds--Karp y la extracción de corte mínimo sobre cada una de las tres configuraciones desde la interfaz interactiva (Figura~\ref{fig:scenario_comparison}), se obtuvieron los resultados consolidados en el Cuadro~\ref{tab:comparacion_escenarios}.
+
+\begin{table}[H]
+\centering
+\caption{Comparación de flujo máximo, corte mínimo y particiones $(S, T)$ entre las tres configuraciones.}
+\label{tab:comparacion_escenarios}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Configuración} & \textbf{Rutas Activas} & \textbf{Flujo Máx. $|x^*|$} & \textbf{Corte Mín. $c(S,T)$} & \textbf{Partición $S$} & \textbf{Partición $T$} & \textbf{Arcos de Corte $(S \to T)$} \\
+\midrule
+\textbf{Config. 1 (Inicial)} & $18 / 18$ & $20\text{ pkg/h}$ & $20\text{ pkg/h}$ & $\{O,A,B,C,D,E,F,G,H\}$ & $\{T\}$ & $(F,T):3,\ (G,T):9,\ (H,T):8$ \\
+\textbf{Config. 2 (Mod. 1)} & $17 / 18$ & $15\text{ pkg/h}$ & $15\text{ pkg/h}$ & $\{O,A,B,C,D,E,F,H\}$ & $\{G, T\}$ & $(E,G):4,\ (F,T):3,\ (H,T):8$ \\
+\textbf{Config. 3 (Mod. 2)} & $19 / 19$ & $24\text{ pkg/h}$ & $24\text{ pkg/h}$ & $\{O\}$ & $\{A,B,C,D,E,F,G,H,T\}$ & $(O,A):10,\ (O,B):8,\ (O,C):6$ \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+Del análisis comparativo de las tres configuraciones se desprenden las siguientes conclusiones operativas:
+
+\begin{itemize}
+    \item \textbf{Cuello de botella en última milla (Configuración 1):} Aunque la planta de despacho $O$ tiene capacidad para emitir hasta $24\text{ pkg/h}$, la red solo logra entregar $|x^*| = 20\text{ pkg/h}$ en $7$ iteraciones. El corte mínimo $S = V \setminus \{T\}$, $T = \{T\}$ confirma que el límite estructural reside exclusivamente en los tres enlaces de ingreso al terminal destino: $(F, T)$, $(G, T)$ y $(H, T)$, cuya suma de capacidades es $3 + 9 + 8 = 20\text{ pkg/h}$.
+    \item \textbf{Impacto de contingencias intermedias (Configuración 2):} Bajo esta contingencia combinada el flujo máximo cae en $5\text{ pkg/h}$ ($-25\%$), disminuyendo a $|x^*| = 15\text{ pkg/h}$ en $6$ iteraciones. El factor determinante es el bloqueo de $(D, G)$ (capacidad $8$): la Terminal Regional $G$ deja de ser alcanzable desde $S$, desplazando el corte mínimo a $T = \{G, T\}$ y dejando a $(E, G)$ (capacidad $4$) como único abastecimiento hacia $G$. Por su parte, la reducción de $(E, H)$ a $3$ queda contenida dentro de $S$, ya que $(F, H)$ absorbe el desvío necesario para seguir saturando $(H, T)$ en $8$, fijando la nueva cota en $4 + 3 + 8 = 15\text{ pkg/h}$.
+    \item \textbf{Saturación total de la fuente tras expansión (Configuración 3):} Al incorporar la ruta directa $(E, T)$ de capacidad $6$ y ampliar $(H, T)$ a $11$, la capacidad total de entrada a $T$ asciende a $3 + 9 + 11 + 6 = 29\text{ pkg/h}$, eliminando el cuello de botella en destino y trasladándolo a la salida del origen $O$. El flujo máximo alcanza $|x^*| = 24\text{ pkg/h}$ ($+4\text{ pkg/h}$ o $+20\%$ respecto a la red base) en $8$ iteraciones, saturando $(O, A)$, $(O, B)$ y $(O, C)$ con corte mínimo $S = \{O\}$, $T = V \setminus \{O\}$ y dejando holgura operativa en $(H, T)$ ($x(H, T) = 6/11$).
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{assets/scenario_comparison.png}
+\caption{Vista comparativa de escenarios en la aplicación (\textit{Scenario Comparison}), mostrando el flujo máximo, corte mínimo, particiones $(S,T)$ y tabla resumen para la red inicial y las dos modificaciones.}
+\label{fig:scenario_comparison}
+\end{figure}
+
+% ============================================================================
+% SECCIÓN 5: VERIFICACIÓN DE RESULTADOS
+% ============================================================================
+\section{Verificación de Resultados}
+
+\subsection{Resolución Manual del Caso de Comprobación (6 Vértices)}
+Para verificar de forma analítica el correcto funcionamiento del algoritmo implementado, se construyó un caso de comprobación propio de $|V| = 6$ vértices y $|E| = 8$ arcos con capacidades enteras (Figura~\ref{fig:red_manual}):
+\[
+    V_{\text{manual}} = \{O, A, B, C, D, T\}, \quad s = O, \quad t = T,
+\]
+con las capacidades $c(O,A)=7$, $c(O,B)=6$, $c(A,C)=5$, $c(A,D)=4$, $c(B,C)=2$, $c(B,D)=5$, $c(C,T)=6$ y $c(D,T)=5$.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    >={Stealth[round]},
+    every node/.style={font=\small},
+    vertex/.style={circle, draw=black!80, thick, fill=blue!8, minimum size=8mm},
+    source/.style={vertex, fill=cyan!25, font=\small\bfseries},
+    sink/.style={vertex, fill=green!25, font=\small\bfseries},
+    edge_lbl/.style={fill=white, inner sep=1.2pt, font=\scriptsize}
+]
+    \node[source] (O) at (0, 0) {$O$};
+    \node[vertex] (A) at (2.8, 1.3) {$A$};
+    \node[vertex] (B) at (2.8, -1.3) {$B$};
+    \node[vertex] (C) at (5.8, 1.3) {$C$};
+    \node[vertex] (D) at (5.8, -1.3) {$D$};
+    \node[sink]   (T) at (8.6, 0) {$T$};
+
+    \draw[->, thick] (O) -- node[edge_lbl] {7} (A);
+    \draw[->, thick] (O) -- node[edge_lbl] {6} (B);
+    \draw[->, thick] (A) -- node[edge_lbl] {5} (C);
+    \draw[->, thick] (A) -- node[edge_lbl, pos=0.32] {4} (D);
+    \draw[->, thick] (B) -- node[edge_lbl, pos=0.32] {2} (C);
+    \draw[->, thick] (B) -- node[edge_lbl] {5} (D);
+    \draw[->, thick] (C) -- node[edge_lbl] {6} (T);
+    \draw[->, thick] (D) -- node[edge_lbl] {5} (T);
+\end{tikzpicture}
+\caption{Caso de comprobación manual construido con $|V| = 6$ vértices y $|E| = 8$ arcos dirigidos.}
+\label{fig:red_manual}
+\end{figure}
+
+\subsubsection{Cálculo Manual por Caminos Aumentantes (BFS -- Edmonds--Karp)}
+Partiendo con flujo nulo $x(u,v) = 0$ en todos los arcos:
+\begin{enumerate}
+    \item \textbf{Iteración 1:} Se selecciona el camino dirigido más corto $P_1: O \to A \to C \to T$.
+    \[
+        \Delta_1 = \min\{c_f(O,A),\, c_f(A,C),\, c_f(C,T)\} = \min\{7, 5, 6\} = 5.
+    \]
+    Se envía un flujo de $5$ unidades por $P_1$. El arco $(A, C)$ queda saturado ($x = 5/5$), mientras que restan capacidades residuales $c_f(O, A) = 7 - 5 = 2$ y $c_f(C, T) = 6 - 5 = 1$. Flujo acumulado: $|x| = 5$.
+
+    \item \textbf{Iteración 2:} Se selecciona el camino aumentante $P_2: O \to A \to D \to T$.
+    \[
+        \Delta_2 = \min\{c_f(O,A),\, c_f(A,D),\, c_f(D,T)\} = \min\{2, 4, 5\} = 2.
+    \]
+    Se envía un flujo de $2$ unidades por $P_2$. Queda saturado el arco $(O, A)$ ($x = 7/7$), y restan capacidades residuales $c_f(A, D) = 4 - 2 = 2$ y $c_f(D, T) = 5 - 2 = 3$. Flujo acumulado: $|x| = 5 + 2 = 7$.
+
+    \item \textbf{Iteración 3:} Se selecciona el camino aumentante $P_3: O \to B \to C \to T$.
+    \[
+        \Delta_3 = \min\{c_f(O,B),\, c_f(B,C),\, c_f(C,T)\} = \min\{6, 2, 1\} = 1.
+    \]
+    Se envía un flujo de $1$ unidad por $P_3$. Queda saturado el arco $(C, T)$ ($x = 6/6$), y restan capacidades residuales $c_f(O, B) = 6 - 1 = 5$ y $c_f(B, C) = 2 - 1 = 1$. Flujo acumulado: $|x| = 7 + 1 = 8$.
+
+    \item \textbf{Iteración 4:} Se selecciona el camino aumentante $P_4: O \to B \to D \to T$.
+    \[
+        \Delta_4 = \min\{c_f(O,B),\, c_f(B,D),\, c_f(D,T)\} = \min\{5, 5, 3\} = 3.
+    \]
+    Se envía un flujo de $3$ unidades por $P_4$. Queda saturado el arco $(D, T)$ ($x = 5/5$), y restan capacidades residuales $c_f(O, B) = 5 - 3 = 2$ y $c_f(B, D) = 5 - 3 = 2$. Flujo acumulado: $|x| = 8 + 3 = 11$.
+\end{enumerate}
+
+Tras la cuarta iteración, ambos enlaces entrantes a $T$ están saturados y no existen más caminos aumentantes desde $O$ hasta $T$ en $G_f$, por lo que el \textbf{flujo máximo obtenido manualmente es $|x^*| = 11$ paquetes por hora}.
+
+\subsubsection{Demostración de Optimalidad mediante Corte Mínimo}
+En el grafo residual final $G_f$, desde $O$ se alcanza $B$ ($c_f(O,B) = 2 > 0$); desde $B$ se alcanzan $C$ ($c_f(B,C) = 1 > 0$) y $D$ ($c_f(B,D) = 2 > 0$); y desde $C$ se alcanza $A$ mediante el arco residual inverso $(C, A)$ ($c_f(C,A) = x(A,C) = 5 > 0$). En cambio, $T$ no es alcanzable porque $c_f(C,T) = 0$ y $c_f(D,T) = 0$. Esto determina la partición de corte mínimo:
+\[
+    S = \{O, A, B, C, D\}, \qquad T = \{T\},
+\]
+cuyos arcos de cruce desde $S$ hacia $T$ son $(C, T)$ y $(D, T)$, con capacidad de corte:
+\[
+    c(S, T) = c(C, T) + c(D, T) = 6 + 5 = 11.
+\]
+Al cumplirse $|x^*| = 11 = c(S, T)$ y verificarse la conservación de flujo en todos los nodos intermedios (Cuadro~\ref{tab:verificacion_manual}), queda demostrada matemáticamente la optimalidad tanto del flujo como del corte encontrado.
+
+\begin{table}[H]
+\centering
+\caption{Comprobación de conservación de flujo en vértices intermedios del caso manual.}
+\label{tab:verificacion_manual}
+\begin{tabular}{cccc}
+\toprule
+\textbf{Vértice Intermedio $v$} & \textbf{Flujo Entrante $\sum x(u,v)$} & \textbf{Flujo Saliente $\sum x(v,w)$} & \textbf{Condición} \\
+\midrule
+$A$ & $x(O,A) = 7$ & $x(A,C) + x(A,D) = 5 + 2 = 7$ & Cumple ($7 = 7$) \\
+$B$ & $x(O,B) = 4$ & $x(B,C) + x(B,D) = 1 + 3 = 4$ & Cumple ($4 = 4$) \\
+$C$ & $x(A,C) + x(B,C) = 5 + 1 = 6$ & $x(C,T) = 6$ & Cumple ($6 = 6$) \\
+$D$ & $x(A,D) + x(B,D) = 2 + 3 = 5$ & $x(D,T) = 5$ & Cumple ($5 = 5$) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Contraste con las Salidas del Código y Verificación de la Red Principal}
+
+Al cargar el caso de comprobación de $6$ vértices en el simulador, la implementación propia en Python arroja exactamente $|x^*| = 11\text{ pkg/h}$ y un corte mínimo $c(S, T) = 11\text{ pkg/h}$ en $4$ iteraciones, coincidiendo sin discrepancias con el cálculo manual. Como se muestra en la pestaña \textit{Optimality Verification} (Figura~\ref{fig:optimality_verification}), la función \texttt{verify\_optimality} valida automáticamente las tres condiciones teóricas:
+\begin{enumerate}
+    \item \textbf{Restricciones de capacidad por arco:} Los $8$ arcos respetan sus capacidades máximas ($0 \le x(u, v) \le c(u, v)$), quedando saturados $(O,A)$ ($7/7$), $(A,C)$ ($5/5$), $(C,T)$ ($6/6$) y $(D,T)$ ($5/5$), y con holgura operativa $(O,B)$ ($4/6$), $(A,D)$ ($2/4$), $(B,C)$ ($1/2$) y $(B,D)$ ($3/5$).
+    \item \textbf{Conservación de flujo en vértices intermedios:} Los balances netos $\sum x(u,v) - \sum x(v,w)$ en $A$ ($7-7=0$), $B$ ($4-4=0$), $C$ ($6-6=0$) y $D$ ($5-5=0$) coinciden exactamente con los obtenidos en el Cuadro~\ref{tab:verificacion_manual}.
+    \item \textbf{Dualidad fuerte:} El valor del flujo máximo iguala exactamente la capacidad del corte mínimo ($|x^*| = 11 = c(S, T)$).
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{assets/optimality_verification.png}
+\caption{Auditoría matemática automatizada en la pestaña \textit{Optimality Verification} para el caso de comprobación de 6 vértices, confirmando coincidencia exacta con el cálculo manual ($|x^*| = 11$).}
+\label{fig:optimality_verification}
+\end{figure}
+
+De manera análoga, el Cuadro~\ref{tab:auditoria_redes} resume la verificación matemática ejecutada por la aplicación sobre la red principal de $10$ vértices y sus dos modificaciones, confirmando que en todos los escenarios se respetan las cotas de capacidad en la totalidad de los arcos, se mantiene balance nulo en todos los nodos intermedios $v \in \{A, B, C, D, E, F, G, H\}$ y se cumple la igualdad $|x^*| = c(S, T)$.
+
+\begin{table}[H]
+\centering
+\caption{Resumen de auditoría matemática de optimalidad para las tres configuraciones de la red de 10 vértices.}
+\label{tab:auditoria_redes}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Configuración} & \textbf{Cotas $0 \le x(u,v) \le c(u,v)$} & \textbf{Conservación ($\text{In} - \text{Out} = 0$)} & \textbf{Dualidad $|x^*| = c(S,T)$} & \textbf{Estado} \\
+\midrule
+\textbf{Config. 1 (Red Base)} & Cumple ($18/18$ arcos) & Cumple ($8/8$ nodos intermedios) & $20 = 20$ & Verificado \\
+\textbf{Config. 2 (Modif. 1)} & Cumple ($17/17$ activos, $1$ en $0$) & Cumple ($8/8$ nodos intermedios) & $15 = 15$ & Verificado \\
+\textbf{Config. 3 (Modif. 2)} & Cumple ($19/19$ arcos) & Cumple ($8/8$ nodos intermedios) & $24 = 24$ & Verificado \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+% ============================================================================
+% REFERENCIAS BIBLIOGRÁFICAS
+% ============================================================================
+\phantomsection
+\addcontentsline{toc}{section}{Referencias}
+\begin{thebibliography}{9}
+\bibitem{cormen}
+Cormen, T. H., Leiserson, C. E., Rivest, R. L., \& Stein, C. (2022). \textit{Introduction to Algorithms} (4th ed.). MIT Press. Capítulo 24: Maximum Flow.
+
+\bibitem{ford1956}
+Ford, L. R., \& Fulkerson, D. R. (1956). Maximal flow through a network. \textit{Canadian Journal of Mathematics}, 8, 399--404.
+
+\bibitem{edmonds1972}
+Edmonds, J., \& Karp, R. M. (1972). Theoretical improvements in algorithmic efficiency for network flow problems. \textit{Journal of the ACM (JACM)}, 19(2), 248--264.
+
+\bibitem{dinic1970}
+Dinic, E. A. (1970). Algorithm for solution of a problem of maximum flow in networks with power estimation. \textit{Soviet Mathematics Doklady}, 11, 1277--1280.
+
+\bibitem{ahuja}
+Ahuja, R. K., Magnanti, T. L., \& Orlin, J. B. (1993). \textit{Network Flows: Theory, Algorithms, and Applications}. Prentice Hall.
+\end{thebibliography}
+
+\end{document}

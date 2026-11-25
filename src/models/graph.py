@@ -99,7 +99,13 @@ class DirectedGraph:
 
     # --- Graph operations ---
 
-    def has_min_distinct_paths(self, s: str, t: str, min_paths: int = MIN_REQUIRED_PATHS, only_active: bool = True) -> bool:
+    def has_min_distinct_paths(
+        self,
+        s: str,
+        t: str,
+        min_paths: int = MIN_REQUIRED_PATHS,
+        only_active: bool = True,
+    ) -> bool:
         """Check if at least min_paths distinct directed paths exist from s to t."""
         if s not in self.vertices or t not in self.vertices or s == t:
             return False

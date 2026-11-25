@@ -67,3 +67,17 @@ class InsufficientPathsError(GraphError):
         super().__init__(
             f"There must be at least {min_paths} distinct directed paths from '{s}' to '{t}'."
         )
+
+
+class NetworkBoundsError(GraphError):
+    def __init__(self, element: str, count: int, min_val: int, max_val: int) -> None:
+        super().__init__(
+            f"Network {element} count ({count}) out of valid range [{min_val}, {max_val}]."
+        )
+
+
+class IsolatedVertexError(GraphError):
+    def __init__(self, vertex_id: str) -> None:
+        super().__init__(
+            f"Isolated vertices are not allowed: '{vertex_id}' has degree 0."
+        )

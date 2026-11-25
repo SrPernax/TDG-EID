@@ -25,7 +25,7 @@ def _recalculate() -> None:
     t = st.session_state.sink
 
     try:
-        validate_source_sink(graph, s, t)
+        validate_source_sink(graph, s, t, only_active=False)
     except GraphError as exc:
         st.session_state.validation_error = str(exc)
         st.session_state.flow_result = None
@@ -109,7 +109,7 @@ def _render_toggle_route_section() -> None:
         return
 
     action_label = "Disable Route" if selected_edge.active else "Enable Route"
-    if st.button(action_label, key="toggle_route_btn", use_container_width=True):
+    if st.button(action_label, key="toggle_route_btn", width="stretch"):
         try:
             new_state = not selected_edge.active
             graph.toggle_edge(selected_edge.u, selected_edge.v, active=new_state)
@@ -159,7 +159,7 @@ def _render_modify_capacity_section() -> None:
         key=f"cap_slider_{selected_edge.u}_{selected_edge.v}_{selected_edge.capacity}",
     )
 
-    if st.button("Update Capacity", key="update_cap_btn", use_container_width=True):
+    if st.button("Update Capacity", key="update_cap_btn", width="stretch"):
         try:
             graph.update_capacity(selected_edge.u, selected_edge.v, int(new_cap))
             _recalculate()
@@ -190,7 +190,7 @@ def _render_add_route_section() -> None:
             step=1,
             key="add_route_cap",
         )
-        submitted = st.form_submit_button("Add Route", use_container_width=True)
+        submitted = st.form_submit_button("Add Route", width="stretch")
         if submitted:
             try:
                 graph.add_edge(origin_u, dest_v, int(capacity))
@@ -227,7 +227,7 @@ def _render_modification_controls() -> None:
     st.sidebar.button(
         "Reset Scenario",
         key="reset_scenario_btn",
-        use_container_width=True,
+        width="stretch",
         on_click=_on_reset_scenario,
     )
 
@@ -249,7 +249,7 @@ def _render_sidebar() -> None:
         selected_s = st.selectbox("Source (s)", options=vertices, key="source_select")
         selected_t = st.selectbox("Sink (t)", options=vertices, key="sink_select")
         submitted = st.form_submit_button(
-            "Recalculate", type="primary", use_container_width=True
+            "Recalculate", type="primary", width="stretch"
         )
         if submitted:
             st.session_state.source = selected_s
@@ -297,8 +297,10 @@ def _render_metrics() -> None:
     if cut_result:
         s_str = ", ".join(cut_result["S"])
         t_str = ", ".join(cut_result["T"])
-        cut_str = ", ".join(
-            f"{u} → {v} ({cap})" for u, v, cap in cut_result["cut_edges"]
+        cut_str = (
+            ", ".join(f"{u} → {v} ({cap})" for u, v, cap in cut_result["cut_edges"])
+            if cut_result["cut_edges"]
+            else "∅ (disconnected)"
         )
         st.markdown(
             f"**Partition S:** `{{{s_str}}}` &nbsp;|&nbsp; "
@@ -381,7 +383,7 @@ def _render_network_view() -> None:
         flows=flow_result["flows"] if flow_result else None,
         min_cut=cut_result,
     )
-    st.graphviz_chart(dot, use_container_width=True)
+    st.graphviz_chart(dot, width="stretch")
     _render_legend()
 
 
@@ -416,7 +418,7 @@ def _render_edges_table() -> None:
         )
 
     st.subheader("Route Flow and Residual Capacity")
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.dataframe(rows, width="stretch", hide_index=True)
 
     iterations = flow_result.get("iterations", [])
     with st.expander(f"Edmonds-Karp Augmenting Paths ({len(iterations)} iterations)", expanded=False):
@@ -435,7 +437,7 @@ def _render_edges_table() -> None:
                         "Cumulative Flow": cumulative,
                     }
                 )
-            st.dataframe(iter_rows, use_container_width=True, hide_index=True)
+            st.dataframe(iter_rows, width="stretch", hide_index=True)
 
 
 def _render_verification_view() -> None:
@@ -484,7 +486,7 @@ def _render_verification_view() -> None:
                 "Check": "OK" if item["ok"] else "FAIL",
             }
         )
-    st.dataframe(conservation_rows, use_container_width=True, hide_index=True)
+    st.dataframe(conservation_rows, width="stretch", hide_index=True)
 
     with st.expander("Capacity Constraint Audit per Route", expanded=False):
         cap_rows: list[dict] = []
@@ -499,7 +501,7 @@ def _render_verification_view() -> None:
                     "Check": "OK" if item["ok"] else "FAIL",
                 }
             )
-        st.dataframe(cap_rows, use_container_width=True, hide_index=True)
+        st.dataframe(cap_rows, width="stretch", hide_index=True)
 
 
 def _compute_comparison_data() -> list[dict]:
@@ -598,7 +600,7 @@ def _render_comparison_view() -> None:
         }
         for item in results
     ]
-    st.dataframe(summary_rows, use_container_width=True, hide_index=True)
+    st.dataframe(summary_rows, width="stretch", hide_index=True)
 
 
 def main() -> None:

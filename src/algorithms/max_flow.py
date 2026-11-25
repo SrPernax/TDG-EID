@@ -14,7 +14,7 @@ from src.models.graph import DirectedGraph
 
 
 def build_residual_graph(graph: DirectedGraph) -> dict[str, dict[str, int]]:
-    """Build the initial residual adjacency map from active edges of the graph."""
+    """Build residual map {u: {v: cap}} with forward and reverse arcs from active edges."""
     residual: dict[str, dict[str, int]] = {v_id: {} for v_id in graph.vertices}
 
     for edge in graph.get_edges(only_active=True):
@@ -24,8 +24,12 @@ def build_residual_graph(graph: DirectedGraph) -> dict[str, dict[str, int]]:
     return residual
 
 
-def _bfs_augmenting_path(residual: dict[str, dict[str, int]], s: str, t: str,) -> tuple[list[str], int] | None:
-    """Find a shortest augmenting path from s to t via BFS and its bottleneck capacity."""
+def _bfs_augmenting_path(
+    residual: dict[str, dict[str, int]],
+    s: str,
+    t: str,
+) -> tuple[list[str], int] | None:
+    """Find shortest augmenting path from s to t via BFS; returns (path, bottleneck) or None."""
     parent: dict[str, str | None] = {s: None}
     queue: deque[str] = deque([s])
 
@@ -55,7 +59,7 @@ def _bfs_augmenting_path(residual: dict[str, dict[str, int]], s: str, t: str,) -
 
 
 def edmonds_karp(graph: DirectedGraph, s: str, t: str) -> dict:
-    """Compute maximum flow from s to t using the Edmonds-Karp algorithm."""
+    """Compute max flow from s to t on graph; returns {max_flow, flows, residual, iterations}."""
     if s not in graph.vertices:
         raise VertexNotFoundError(s)
     if t not in graph.vertices:
@@ -108,7 +112,7 @@ def edmonds_karp(graph: DirectedGraph, s: str, t: str) -> dict:
 
 
 def find_min_cut(graph: DirectedGraph, residual: dict[str, dict[str, int]], s: str, t: str) -> dict:
-    """Identify the minimum cut partition (S, T) and crossing edges from the residual graph."""
+    """Find min-cut from residual graph; returns {S, T, cut_edges, capacity}."""
     if s not in graph.vertices:
         raise VertexNotFoundError(s)
     if t not in graph.vertices:
@@ -144,11 +148,15 @@ def find_min_cut(graph: DirectedGraph, residual: dict[str, dict[str, int]], s: s
     }
 
 
-def verify_optimality(graph: DirectedGraph, flows: dict[tuple[str, str], int], max_flow_value: int, min_cut_capacity: int, s: str, t: str) -> dict:
-    """
-    Verify mathematical optimality conditions on the computed flow and min-cut:
-    capacity constraints, flow conservation at intermediate vertices, and strong duality.
-    """
+def verify_optimality(
+    graph: DirectedGraph,
+    flows: dict[tuple[str, str], int],
+    max_flow_value: int,
+    min_cut_capacity: int,
+    s: str,
+    t: str,
+) -> dict:
+    """Verify capacity bounds, intermediate conservation, and |x| = c(S, T); returns audit dict."""
     if s not in graph.vertices:
         raise VertexNotFoundError(s)
     if t not in graph.vertices:

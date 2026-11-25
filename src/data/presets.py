@@ -4,6 +4,7 @@ Description:
     Predefined logistics network configurations and the manual verification test case.
 """
 
+from src.core.validators import validate_initial_network, validate_manual_network
 from src.models.graph import DirectedGraph
 
 PRESET_INITIAL = "Main Network"
@@ -53,6 +54,7 @@ def build_initial_network() -> tuple[DirectedGraph, str, str]:
     ]
     for u, v, cap in routes:
         graph.add_edge(u, v, cap)
+    validate_initial_network(graph)
     return graph, "O", "T"
 
 
@@ -79,7 +81,7 @@ def build_modification_2() -> tuple[DirectedGraph, str, str]:
 
 
 def build_manual_verification_case() -> tuple[DirectedGraph, str, str]:
-    """Build Manual Verification Test Case (6 vertices, 7 edges)."""
+    """Build Manual Verification Test Case (6 vertices, 8 edges)."""
     graph = DirectedGraph(name=PRESET_MANUAL)
 
     centers = [
@@ -94,17 +96,18 @@ def build_manual_verification_case() -> tuple[DirectedGraph, str, str]:
         graph.add_vertex(v_id, label)
 
     routes = [
-        ("O", "A", 8),
+        ("O", "A", 7),
         ("O", "B", 6),
         ("A", "C", 5),
-        ("A", "D", 3),
-        ("B", "D", 6),
-        ("C", "T", 5),
-        ("D", "T", 9),
+        ("A", "D", 4),
+        ("B", "C", 2),
+        ("B", "D", 5),
+        ("C", "T", 6),
+        ("D", "T", 5),
     ]
     for u, v, cap in routes:
         graph.add_edge(u, v, cap)
-
+    validate_manual_network(graph)
     return graph, "O", "T"
 
 
