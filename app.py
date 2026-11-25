@@ -2,13 +2,14 @@
 Module: app.py
 Description:
     Interactive Streamlit application to select scenarios, choose source/sink
-    vertices, execute maximum flow and minimum cut calculations, and visualize
-    the logistics network.
+    vertices, apply live network modifications, execute maximum flow and
+    minimum cut calculations, and visualize the logistics network.
 """
 
 import streamlit as st
 
 from src.algorithms import edmonds_karp, find_min_cut, verify_optimality
+from src.core.config import MAX_EDGE_CAPACITY, MIN_EDGE_CAPACITY
 from src.core.exceptions import GraphError
 from src.core.validators import validate_source_sink
 from src.data import get_preset_names, load_preset
@@ -56,6 +57,8 @@ def _load_scenario(preset_name: str) -> None:
     st.session_state.sink = t
     st.session_state.source_select = s
     st.session_state.sink_select = t
+    st.session_state.modification_error = None
+    st.session_state.modification_success = None
     _recalculate()
 
 
@@ -72,8 +75,155 @@ def _init_session_state() -> None:
         _load_scenario(default_preset)
 
 
+def _render_toggle_route_section() -> None:
+    """Render sidebar controls to enable or disable any existing route."""
+    graph = st.session_state.graph
+    edges = graph.get_edges(only_active=False)
+    if not edges:
+        st.info("No routes available in the current network.")
+        return
+
+    edge_keys = [(edge.u, edge.v) for edge in edges]
+
+    def _format_toggle_label(key: tuple[str, str]) -> str:
+        edge = graph.get_edge(key[0], key[1])
+        status = "Active" if edge and edge.active else "Disabled"
+        cap = edge.capacity if edge else 0
+        return f"{key[0]} → {key[1]} (cap: {cap}, {status})"
+
+    selected_key = st.selectbox(
+        "Select route",
+        options=edge_keys,
+        format_func=_format_toggle_label,
+        key="toggle_route_select",
+    )
+    selected_edge = graph.get_edge(selected_key[0], selected_key[1])
+    if selected_edge is None:
+        return
+
+    action_label = "Disable Route" if selected_edge.active else "Enable Route"
+    if st.button(action_label, key="toggle_route_btn", use_container_width=True):
+        try:
+            new_state = not selected_edge.active
+            graph.toggle_edge(selected_edge.u, selected_edge.v, active=new_state)
+            _recalculate()
+            state_text = "enabled" if new_state else "disabled"
+            st.session_state.modification_error = None
+            st.session_state.modification_success = (
+                f"Route ({selected_edge.u} → {selected_edge.v}) {state_text}."
+            )
+            st.rerun()
+        except GraphError as exc:
+            st.session_state.modification_error = str(exc)
+            st.session_state.modification_success = None
+
+
+def _render_modify_capacity_section() -> None:
+    """Render sidebar controls to modify the capacity (1..12) of an existing route."""
+    graph = st.session_state.graph
+    edges = graph.get_edges(only_active=False)
+    if not edges:
+        st.info("No routes available in the current network.")
+        return
+
+    edge_keys = [(edge.u, edge.v) for edge in edges]
+
+    def _format_capacity_label(key: tuple[str, str]) -> str:
+        edge = graph.get_edge(key[0], key[1])
+        cap = edge.capacity if edge else 0
+        return f"{key[0]} → {key[1]} (current: {cap})"
+
+    selected_key = st.selectbox(
+        "Select route",
+        options=edge_keys,
+        format_func=_format_capacity_label,
+        key="capacity_route_select",
+    )
+    selected_edge = graph.get_edge(selected_key[0], selected_key[1])
+    if selected_edge is None:
+        return
+
+    new_cap = st.slider(
+        "New capacity (pkg/h)",
+        min_value=MIN_EDGE_CAPACITY,
+        max_value=MAX_EDGE_CAPACITY,
+        value=selected_edge.capacity,
+        step=1,
+        key=f"cap_slider_{selected_edge.u}_{selected_edge.v}_{selected_edge.capacity}",
+    )
+
+    if st.button("Update Capacity", key="update_cap_btn", use_container_width=True):
+        try:
+            graph.update_capacity(selected_edge.u, selected_edge.v, int(new_cap))
+            _recalculate()
+            st.session_state.modification_error = None
+            st.session_state.modification_success = (
+                f"Updated capacity of ({selected_edge.u} → {selected_edge.v}) "
+                f"to {new_cap} pkg/h."
+            )
+            st.rerun()
+        except GraphError as exc:
+            st.session_state.modification_error = str(exc)
+            st.session_state.modification_success = None
+
+
+def _render_add_route_section() -> None:
+    """Render sidebar form to add a new directed route (u, v) with capacity validation."""
+    graph = st.session_state.graph
+    vertices = graph.get_vertices()
+
+    with st.form("add_route_form"):
+        origin_u = st.selectbox("Origin (u)", options=vertices, key="add_route_u")
+        dest_v = st.selectbox("Destination (v)", options=vertices, key="add_route_v")
+        capacity = st.slider(
+            "Capacity (pkg/h)",
+            min_value=MIN_EDGE_CAPACITY,
+            max_value=MAX_EDGE_CAPACITY,
+            value=5,
+            step=1,
+            key="add_route_cap",
+        )
+        submitted = st.form_submit_button("Add Route", use_container_width=True)
+        if submitted:
+            try:
+                graph.add_edge(origin_u, dest_v, int(capacity))
+                _recalculate()
+                st.session_state.modification_error = None
+                st.session_state.modification_success = (
+                    f"Added route ({origin_u} → {dest_v}) with capacity {capacity} pkg/h."
+                )
+                st.rerun()
+            except GraphError as exc:
+                st.session_state.modification_error = str(exc)
+                st.session_state.modification_success = None
+
+
+def _render_modification_controls() -> None:
+    """Render live network modification forms and validation feedback in the sidebar."""
+    st.sidebar.divider()
+    st.sidebar.subheader("Live Network Editor")
+
+    with st.sidebar.expander("Enable / Disable Route", expanded=False):
+        _render_toggle_route_section()
+
+    with st.sidebar.expander("Modify Route Capacity", expanded=False):
+        _render_modify_capacity_section()
+
+    with st.sidebar.expander("Add New Route", expanded=False):
+        _render_add_route_section()
+
+    if st.session_state.get("modification_error"):
+        st.sidebar.error(st.session_state.modification_error)
+    elif st.session_state.get("modification_success"):
+        st.sidebar.success(st.session_state.modification_success)
+
+    if st.sidebar.button("Reset Scenario", key="reset_scenario_btn", use_container_width=True):
+        _load_scenario(st.session_state.selected_preset)
+        st.rerun()
+
+
 def _render_sidebar() -> None:
-    """Render scenario selector and source/sink recalculation form."""
+    """Render scenario selector, source/sink form, and live network editor."""
     st.sidebar.header("Control Panel")
 
     st.sidebar.selectbox(
@@ -95,6 +245,8 @@ def _render_sidebar() -> None:
             st.session_state.source = selected_s
             st.session_state.sink = selected_t
             _recalculate()
+
+    _render_modification_controls()
 
 
 def _render_metrics() -> None:
